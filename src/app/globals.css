@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f9fafb;
+  --foreground: #111827;
 }
 
 @theme inline {
@@ -12,15 +12,40 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Ensure all text elements have dark color on light background */
+h1, h2, h3, h4, h5, h6, p, span, div, label {
+  color: #111827 !important;
+}
+
+/* Form elements styling */
+input, textarea, select {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Button text should remain as styled by Tailwind classes */
+button {
+  /* Let Tailwind handle button colors */
+}
+
+/* Specific override for sign out button text to ensure it's white */
+button.bg-gray-800, button.bg-gray-800 span, button.bg-gray-800 * {
+  color: #ffffff !important;
+}
+
+/* Links should remain as styled */
+a {
+  /* Let Tailwind handle link colors */
 }
