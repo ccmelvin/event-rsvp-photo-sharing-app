@@ -143,12 +143,13 @@ export default function GalleryPage() {
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ duration: 0.5, delay: photoIndex * 0.05 }}
                           className="aspect-square"
+                          style={{ minHeight: '150px', minWidth: '150px' }}
                         >
                           <PhotoDisplay
                             s3Key={photo.s3Key}
                             alt={`Photo from ${event.title}`}
                             caption={photo.caption}
-                            className="w-full h-full"
+                            className="w-full h-full rounded-lg"
                             showLightbox={true}
                           />
                         </motion.div>
@@ -157,7 +158,10 @@ export default function GalleryPage() {
                       {/* Show more indicator */}
                       {event.photoCount > 12 && (
                         <Link href={`/events/${event.id}`}>
-                          <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-colors cursor-pointer">
+                          <div 
+                            className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-colors cursor-pointer"
+                            style={{ minHeight: '150px', minWidth: '150px' }}
+                          >
                             <div className="text-center">
                               <Camera className="h-6 w-6 text-gray-400 mx-auto mb-1" />
                               <span className="text-sm text-gray-600">

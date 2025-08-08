@@ -69,7 +69,7 @@ export function PhotoDisplay({
 
   if (loading) {
     return (
-      <div className={`bg-gray-200 rounded-lg flex items-center justify-center ${className}`}>
+      <div className={`bg-gray-200 rounded-lg flex items-center justify-center ${className}`} style={{ minHeight: '150px' }}>
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
       </div>
     );
@@ -77,8 +77,31 @@ export function PhotoDisplay({
 
   if (error || !imageUrl) {
     return (
-      <div className={`bg-gray-200 rounded-lg flex items-center justify-center ${className}`}>
-        <Camera className="h-8 w-8 text-gray-400" />
+      <div className={`bg-gray-200 rounded-lg flex flex-col items-center justify-center ${className}`} style={{ minHeight: '150px' }}>
+        <Camera className="h-8 w-8 text-gray-400 mb-2" />
+        <span className="text-xs text-gray-500 text-center px-2">Image unavailable</span>
+        <button 
+          onClick={() => {
+            setError(false);
+            setLoading(true);
+            // Retry fetching the image
+            const fetchImageUrl = async () => {
+              try {
+                const result = await getUrl({ path: s3Key });
+                setImageUrl(result.url.toString());
+                setLoading(false);
+              } catch (error) {
+                console.error('Error fetching image URL:', error);
+                setError(true);
+                setLoading(false);
+              }
+            };
+            fetchImageUrl();
+          }}
+          className="text-xs text-blue-600 hover:text-blue-800 mt-1 px-2 py-1 rounded"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -88,11 +111,17 @@ export function PhotoDisplay({
       <div 
         className={`relative overflow-hidden rounded-lg ${showLightbox ? 'cursor-pointer' : ''} ${className}`}
         onClick={handleImageClick}
+        style={{ minWidth: '150px', minHeight: '150px' }}
       >
         <img
           src={imageUrl}
           alt={alt}
           className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+          style={{ 
+            minWidth: '150px', 
+            minHeight: '150px',
+            backgroundColor: '#f3f4f6' // Light gray background
+          }}
           onLoad={handleImageLoad}
           onError={handleImageError}
         />

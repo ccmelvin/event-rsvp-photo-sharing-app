@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { generateClient } from 'aws-amplify/data';
+import { remove } from 'aws-amplify/storage';
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { Calendar, Users, Camera, Trash2, Edit, Eye } from 'lucide-react';
 import { PhotoDisplay } from '@/components/PhotoDisplay';
+import { Modal } from '@/components/Modal';
 import Link from 'next/link';
 import type { Schema } from '../../../amplify/data/resource';
 
@@ -17,6 +19,10 @@ export default function AdminPage() {
   const [photos, setPhotos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'events' | 'photos'>('events');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -51,16 +57,23 @@ export default function AdminPage() {
     }
   };
 
-  const deleteEvent = async (eventId: string) => {
-    if (!confirm('Are you sure you want to delete this event?')) return;
+  const deleteEvent = async () => {
+    if (!selectedEventId) return;
 
     try {
-      await client.models.Event.delete({ id: eventId });
-      setEvents(events.filter(event => event.id !== eventId));
+      await client.models.Event.delete({ id: selectedEventId });
+      setEvents(events.filter(event => event.id !== selectedEventId));
+      setShowDeleteModal(false);
+      setSelectedEventId(null);
     } catch (error) {
       console.error('Error deleting event:', error);
       alert('Failed to delete event. Please try again.');
     }
+  };
+
+  const openDeleteModal = (eventId: string) => {
+    setSelectedEventId(eventId);
+    setShowDeleteModal(true);
   };
 
   const approvePhoto = async (photoId: string) => {
@@ -76,16 +89,27 @@ export default function AdminPage() {
     }
   };
 
-  const rejectPhoto = async (photoId: string) => {
-    if (!confirm('Are you sure you want to reject this photo?')) return;
+  const rejectPhoto = async () => {
+    if (!selectedPhotoId) return;
 
     try {
-      await client.models.Photo.delete({ id: photoId });
-      setPhotos(photos.filter(photo => photo.id !== photoId));
+      const photoToReject = photos.find(p => p.id === selectedPhotoId);
+      if (photoToReject?.s3Key) {
+        await remove({ path: photoToReject.s3Key });
+      }
+      await client.models.Photo.delete({ id: selectedPhotoId });
+      setPhotos(photos.filter(photo => photo.id !== selectedPhotoId));
+      setShowRejectModal(false);
+      setSelectedPhotoId(null);
     } catch (error) {
       console.error('Error rejecting photo:', error);
       alert('Failed to reject photo. Please try again.');
     }
+  };
+
+  const openRejectModal = (photoId: string) => {
+    setSelectedPhotoId(photoId);
+    setShowRejectModal(true);
   };
 
   const formatDate = (dateString: string) => {
@@ -162,9 +186,8 @@ export default function AdminPage() {
                     <Link href="/events/create">
                       <button 
                         className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors"
-                        style={{ color: '#ffffff' }}
                       >
-                        <span style={{ color: '#ffffff' }}>Create New Event</span>
+                        <span>Create New Event</span>
                       </button>
                     </Link>
                   </div>
@@ -198,8 +221,13 @@ export default function AdminPage() {
                                 <Eye className="h-5 w-5" />
                               </button>
                             </Link>
+                            <Link href={`/events/${event.id}/edit`}>
+                              <button className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors">
+                                <Edit className="h-5 w-5" />
+                              </button>
+                            </Link>
                             <button
-                              onClick={() => deleteEvent(event.id)}
+                              onClick={() => openDeleteModal(event.id)}
                               className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
                             >
                               <Trash2 className="h-5 w-5" />
@@ -262,7 +290,7 @@ export default function AdminPage() {
                               Approve
                             </button>
                             <button
-                              onClick={() => rejectPhoto(photo.id)}
+                              onClick={() => openRejectModal(photo.id)}
                               className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors text-sm"
                             >
                               Reject
@@ -277,6 +305,72 @@ export default function AdminPage() {
             </div>
           </div>
         </motion.div>
+
+        {/* Delete Event Modal */}
+        <Modal
+          isOpen={showDeleteModal}
+          onClose={() => {
+            setShowDeleteModal(false);
+            setSelectedEventId(null);
+          }}
+          title="Delete Event"
+        >
+          <div className="space-y-4">
+            <p className="text-gray-600">
+              Are you sure you want to delete this event? This will also delete all associated RSVPs and photos. This action cannot be undone.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setSelectedEventId(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteEvent}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Delete Event
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Reject Photo Modal */}
+        <Modal
+          isOpen={showRejectModal}
+          onClose={() => {
+            setShowRejectModal(false);
+            setSelectedPhotoId(null);
+          }}
+          title="Reject Photo"
+        >
+          <div className="space-y-4">
+            <p className="text-gray-600">
+              Are you sure you want to reject this photo? The photo will be permanently deleted. This action cannot be undone.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowRejectModal(false);
+                  setSelectedPhotoId(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={rejectPhoto}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Reject Photo
+              </button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   );

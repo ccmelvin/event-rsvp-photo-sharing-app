@@ -5,8 +5,10 @@ import { motion } from 'framer-motion';
 import { generateClient } from 'aws-amplify/data';
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { StorageManager } from '@aws-amplify/ui-react-storage';
-import { Calendar, MapPin, Users, Camera, Check, X, Clock } from 'lucide-react';
+import { Calendar, MapPin, Users, Camera, Check, X, Clock, Edit } from 'lucide-react';
 import { PhotoDisplay } from '@/components/PhotoDisplay';
+import { PhotoGallery } from '@/components/PhotoGallery';
+import Link from 'next/link';
 import type { Schema } from '../../../../amplify/data/resource';
 
 const client = generateClient<Schema>();
@@ -162,7 +164,22 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
         >
           {/* Event Header */}
           <div className="bg-white rounded-lg shadow-md p-8 mb-8">
-            <h1 className="text-4xl font-bold text-gray-800 mb-4">{event.title}</h1>
+            <div className="flex justify-between items-start mb-4">
+              <h1 className="text-4xl font-bold text-gray-800">{event.title}</h1>
+              {/* Edit button for event creator */}
+              {user && event.createdBy === user.userId && (
+                <Link href={`/events/${resolvedParams.id}/edit`}>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="flex items-center space-x-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors"
+                  >
+                    <Edit className="h-4 w-4" />
+                    <span>Edit Event</span>
+                  </motion.button>
+                </Link>
+              )}
+            </div>
             
             {event.description && (
               <p className="text-gray-600 mb-6 text-lg">{event.description}</p>
@@ -231,41 +248,55 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
               transition={{ duration: 0.8, delay: 0.2 }}
               className="bg-white rounded-lg shadow-md p-8 mb-8"
             >
-              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+              <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
                 <Camera className="h-6 w-6 mr-2" />
                 Share Photos
               </h2>
-              <StorageManager
-                acceptedFileTypes={['image/*']}
-                path={`event-photos/${resolvedParams.id}/`}
-                maxFileCount={10}
-                maxFileSize={10000000} // 10MB
-                onUploadSuccess={async (event) => {
-                  // Create database record for the uploaded photo
-                  try {
-                    console.log('Upload success event:', event);
-                    
-                    // Extract file info from the event
-                    const filePath = event.path || event.key;
-                    const fileName = filePath ? filePath.split('/').pop() : 'unknown';
-                    
-                    await client.models.Photo.create({
-                      eventId: resolvedParams.id,
-                      uploadedBy: user.userId,
-                      fileName: fileName,
-                      s3Key: filePath,
-                      isApproved: false, // Requires admin approval
-                    });
-                    
-                    console.log('Photo record created successfully');
-                    
-                    // Refresh photos after upload
-                    fetchPhotos();
-                  } catch (error) {
-                    console.error('Error creating photo record:', error);
-                  }
-                }}
-              />
+              
+              <div className="space-y-4">
+                <StorageManager
+                  acceptedFileTypes={['image/*']}
+                  path={`event-photos/${resolvedParams.id}/`}
+                  maxFileCount={10}
+                  maxFileSize={10000000} // 10MB
+                  onUploadSuccess={async (event) => {
+                    // Create database record for the uploaded photo
+                    try {
+                      console.log('Upload success event:', event);
+                      
+                      // Extract file info from the event
+                      const filePath = event.path || event.key;
+                      const fileName = filePath ? filePath.split('/').pop() : 'unknown';
+                      
+                      await client.models.Photo.create({
+                        eventId: resolvedParams.id,
+                        uploadedBy: user.userId,
+                        fileName: fileName,
+                        s3Key: filePath,
+                        isApproved: true, // Auto-approve photos
+                      });
+                      
+                      console.log('Photo record created successfully');
+                      
+                      // Refresh photos after upload
+                      fetchPhotos();
+                    } catch (error) {
+                      console.error('Error creating photo record:', error);
+                    }
+                  }}
+                />
+                
+                <div className="text-sm text-gray-600 bg-blue-50 p-4 rounded-lg">
+                  <h4 className="font-semibold mb-2">📸 Photo Upload Guidelines:</h4>
+                  <ul className="space-y-1 text-xs">
+                    <li>• Upload up to 10 photos at once</li>
+                    <li>• Maximum file size: 10MB per photo</li>
+                    <li>• Supported formats: JPG, PNG, GIF</li>
+                    <li>• Photos require admin approval before appearing in gallery</li>
+                    <li>• You can edit captions and delete your photos after approval</li>
+                  </ul>
+                </div>
+              </div>
             </motion.div>
           )}
 
@@ -278,33 +309,14 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
           >
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Event Gallery</h2>
             
-            {photos.length === 0 ? (
-              <div className="text-center py-12">
-                <Camera className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-600 mb-2">No photos yet</h3>
-                <p className="text-gray-500">Be the first to share a photo from this event!</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {photos.map((photo, index) => (
-                  <motion.div
-                    key={photo.id}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: index * 0.1 }}
-                    className="aspect-square"
-                  >
-                    <PhotoDisplay
-                      s3Key={photo.s3Key}
-                      alt={`Photo from ${event.title}`}
-                      caption={photo.caption}
-                      className="w-full h-full"
-                      showLightbox={true}
-                    />
-                  </motion.div>
-                ))}
-              </div>
-            )}
+            <PhotoGallery
+              photos={photos}
+              eventTitle={event.title}
+              eventId={resolvedParams.id}
+              currentUserId={user?.userId}
+              isEventCreator={user?.userId === event.createdBy}
+              onPhotosUpdate={fetchPhotos}
+            />
           </motion.div>
         </motion.div>
       </div>

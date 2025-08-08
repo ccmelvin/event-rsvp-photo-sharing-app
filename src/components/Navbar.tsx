@@ -17,13 +17,10 @@ export function Navbar() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      // Small delay to ensure auth state is updated
-      setTimeout(() => {
-        router.replace('/');
-      }, 100);
+      window.location.href = '/';
     } catch (error) {
       console.error('Error signing out:', error);
-      router.replace('/');
+      window.location.href = '/';
     }
   };
 
@@ -72,10 +69,9 @@ export function Navbar() {
                   whileTap={{ scale: 0.95 }}
                   onClick={handleSignOut}
                   className="flex items-center space-x-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors"
-                  style={{ color: '#ffffff' }}
                 >
-                  <LogOut className="h-4 w-4" style={{ color: '#ffffff' }} />
-                  <span style={{ color: '#ffffff' }}>Sign Out</span>
+                  <LogOut className="h-4 w-4" />
+                  <span>Sign Out</span>
                 </motion.button>
               </div>
             ) : (
@@ -84,9 +80,8 @@ export function Navbar() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors"
-                  style={{ color: '#ffffff' }}
                 >
-                  <span style={{ color: '#ffffff' }}>Sign In</span>
+                  <span>Sign In</span>
                 </motion.button>
               </Link>
             )}
@@ -149,19 +144,17 @@ export function Navbar() {
                       handleSignOut();
                     }}
                     className="flex items-center space-x-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors w-full justify-center"
-                    style={{ color: '#ffffff' }}
                   >
-                    <LogOut className="h-4 w-4" style={{ color: '#ffffff' }} />
-                    <span style={{ color: '#ffffff' }}>Sign Out</span>
+                    <LogOut className="h-4 w-4" />
+                    <span>Sign Out</span>
                   </button>
                 </div>
               ) : (
                 <Link href="/auth" onClick={() => setIsMenuOpen(false)}>
                   <button 
                     className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors w-full"
-                    style={{ color: '#ffffff' }}
                   >
-                    <span style={{ color: '#ffffff' }}>Sign In</span>
+                    <span>Sign In</span>
                   </button>
                 </Link>
               )}

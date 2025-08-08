@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate Test Images</title></head>
+<body>
+<canvas id="canvas" width="300" height="200"></canvas>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// Create a colorful test image
+ctx.fillStyle = '#4F46E5'; // Blue background
+ctx.fillRect(0, 0, 300, 200);
+
+ctx.fillStyle = '#EF4444'; // Red rectangle
+ctx.fillRect(50, 50, 100, 60);
+
+ctx.fillStyle = '#10B981'; // Green rectangle
+ctx.fillRect(150, 90, 100, 60);
+
+ctx.fillStyle = '#FFFFFF'; // White text
+ctx.font = '20px Arial';
+ctx.fillText('Test Photo', 100, 30);
+ctx.fillText('EventShare', 100, 180);
+
+// Convert to blob and download
+canvas.toBlob(function(blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'proper-test-photo.jpg';
+  a.click();
+}, 'image/jpeg', 0.9);
+</script>
+</body>
+</html>

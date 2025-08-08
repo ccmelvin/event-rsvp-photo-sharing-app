@@ -73,10 +73,9 @@ export default function EventsPage() {
               <Link href="/events/create">
                 <button 
                   className="bg-gray-800 text-white px-6 py-3 rounded-lg hover:bg-gray-900 transition-colors flex items-center space-x-2"
-                  style={{ color: '#ffffff' }}
                 >
-                  <Plus className="h-5 w-5" style={{ color: '#ffffff' }} />
-                  <span style={{ color: '#ffffff' }}>Create Event</span>
+                  <Plus className="h-5 w-5" />
+                  <span>Create Event</span>
                 </button>
               </Link>
             </motion.div>
@@ -135,7 +134,7 @@ export default function EventsPage() {
                   </div>
 
                   <Link href={`/events/${event.id}`}>
-                    <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+                    <button className="w-full bg-gray-800 text-white py-2 px-4 rounded-lg hover:bg-gray-900 transition-colors">
                       View Details
                     </button>
                   </Link>
