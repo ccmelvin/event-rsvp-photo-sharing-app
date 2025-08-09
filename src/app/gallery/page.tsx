@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { generateClient } from 'aws-amplify/data';
+import { useAuthenticator } from '@aws-amplify/ui-react';
 import { Camera, Calendar, MapPin } from 'lucide-react';
 import { PhotoDisplay } from '@/components/PhotoDisplay';
 import Link from 'next/link';
@@ -11,56 +12,53 @@ import type { Schema } from '../../../amplify/data/resource';
 const client = generateClient<Schema>();
 
 export default function GalleryPage() {
+  const { user } = useAuthenticator((context) => [context.user]);
+  const [photos, setPhotos] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<string>('all');
 
   useEffect(() => {
-    fetchEventsWithPhotos();
+    fetchPhotos();
+    fetchEvents();
   }, []);
 
-  const fetchEventsWithPhotos = async () => {
+  const fetchPhotos = async () => {
     try {
-      // Fetch all public events
-      const { data: eventsData } = await client.models.Event.list({
-        filter: { isPublic: { eq: true } },
+      const { data } = await client.models.Photo.list({
+        filter: { isApproved: { eq: true } },
       });
-
-      // For each event, fetch approved photos
-      const eventsWithPhotos = await Promise.all(
-        eventsData.map(async (event) => {
-          const { data: photosData } = await client.models.Photo.list({
-            filter: {
-              eventId: { eq: event.id },
-              isApproved: { eq: true },
-            },
-          });
-          return {
-            ...event,
-            photos: photosData,
-            photoCount: photosData.length,
-          };
-        })
-      );
-
-      // Filter events that have photos and sort by photo count
-      const eventsWithPhotosFiltered = eventsWithPhotos
-        .filter(event => event.photoCount > 0)
-        .sort((a, b) => b.photoCount - a.photoCount);
-
-      setEvents(eventsWithPhotosFiltered);
+      setPhotos(data);
     } catch (error) {
-      console.error('Error fetching events with photos:', error);
+      console.error('Error fetching photos:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+  const fetchEvents = async () => {
+    try {
+      const { data } = await client.models.Event.list({
+        filter: { isPublic: { eq: true } },
+      });
+      setEvents(data);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    }
+  };
+
+  const filteredPhotos = selectedEvent === 'all' 
+    ? photos 
+    : photos.filter(photo => photo.eventId === selectedEvent);
+
+  const getEventTitle = (eventId: string) => {
+    const event = events.find(e => e.id === eventId);
+    return event?.title || 'Unknown Event';
+  };
+
+  const getEventDetails = (eventId: string) => {
+    const event = events.find(e => e.id === eventId);
+    return event;
   };
 
   if (loading) {
@@ -79,104 +77,111 @@ export default function GalleryPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
         >
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-800 mb-4">Event Gallery</h1>
-            <p className="text-xl text-gray-600">
-              Browse photos from all our amazing events
-            </p>
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-gray-800 mb-4">Photo Gallery</h1>
+            <p className="text-gray-600">Browse photos from all events</p>
           </div>
 
-          {events.length === 0 ? (
+          {/* Event Filter */}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Filter by Event</h3>
+            <select
+              value={selectedEvent}
+              onChange={(e) => setSelectedEvent(e.target.value)}
+              className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">All Events ({photos.length} photos)</option>
+              {events.map((event) => {
+                const eventPhotoCount = photos.filter(p => p.eventId === event.id).length;
+                return (
+                  <option key={event.id} value={event.id}>
+                    {event.title} ({eventPhotoCount} photos)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* Photos Grid */}
+          {filteredPhotos.length === 0 ? (
             <div className="text-center py-16">
               <Camera className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-600 mb-2">No photos yet</h3>
-              <p className="text-gray-500">Photos from events will appear here once they're uploaded!</p>
+              <h3 className="text-xl font-semibold text-gray-600 mb-2">
+                {selectedEvent === 'all' ? 'No photos yet' : 'No photos for this event'}
+              </h3>
+              <p className="text-gray-500">
+                {selectedEvent === 'all' 
+                  ? 'Photos from events will appear here once uploaded and approved.'
+                  : 'This event doesn\'t have any photos yet.'
+                }
+              </p>
             </div>
           ) : (
-            <div className="grid gap-8">
-              {events.map((event, index) => (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, delay: index * 0.1 }}
-                  className="bg-white rounded-lg shadow-md overflow-hidden"
-                >
-                  {/* Event Header */}
-                  <div className="p-6 border-b border-gray-200">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h2 className="text-2xl font-bold text-gray-800 mb-2">{event.title}</h2>
-                        <div className="flex items-center space-x-4 text-gray-600">
-                          <div className="flex items-center">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            <span className="text-sm">{formatDate(event.date)}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <MapPin className="h-4 w-4 mr-1" />
-                            <span className="text-sm">{event.location}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Camera className="h-4 w-4 mr-1" />
-                            <span className="text-sm">{event.photoCount} photos</span>
-                          </div>
-                        </div>
-                      </div>
-                      <Link href={`/events/${event.id}`}>
-                        <button 
-                          className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors"
-                          style={{ color: '#ffffff' }}
-                        >
-                          <span style={{ color: '#ffffff' }}>View Event</span>
-                        </button>
-                      </Link>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {filteredPhotos.map((photo, index) => {
+                const event = getEventDetails(photo.eventId);
+                return (
+                  <motion.div
+                    key={photo.id}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                    className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+                  >
+                    {/* Photo */}
+                    <div className="aspect-square">
+                      <PhotoDisplay
+                        s3Key={photo.s3Key}
+                        alt={`Photo from ${getEventTitle(photo.eventId)}`}
+                        caption={photo.caption}
+                        className="w-full h-full"
+                        showLightbox={true}
+                      />
                     </div>
-                  </div>
 
-                  {/* Photo Grid */}
-                  <div className="p-6">
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                      {event.photos.slice(0, 12).map((photo: any, photoIndex: number) => (
-                        <motion.div
-                          key={photo.id}
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: 0.5, delay: photoIndex * 0.05 }}
-                          className="aspect-square"
-                          style={{ minHeight: '150px', minWidth: '150px' }}
-                        >
-                          <PhotoDisplay
-                            s3Key={photo.s3Key}
-                            alt={`Photo from ${event.title}`}
-                            caption={photo.caption}
-                            className="w-full h-full rounded-lg"
-                            showLightbox={true}
-                          />
-                        </motion.div>
-                      ))}
-                      
-                      {/* Show more indicator */}
-                      {event.photoCount > 12 && (
-                        <Link href={`/events/${event.id}`}>
-                          <div 
-                            className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-colors cursor-pointer"
-                            style={{ minHeight: '150px', minWidth: '150px' }}
-                          >
-                            <div className="text-center">
-                              <Camera className="h-6 w-6 text-gray-400 mx-auto mb-1" />
-                              <span className="text-sm text-gray-600">
-                                +{event.photoCount - 12} more
-                              </span>
-                            </div>
-                          </div>
-                        </Link>
+                    {/* Photo Info */}
+                    <div className="p-4">
+                      {photo.caption && (
+                        <p className="text-sm text-gray-700 mb-2 line-clamp-2">
+                          {photo.caption}
+                        </p>
                       )}
+                      
+                      {/* Event Info */}
+                      <Link href={`/events/${photo.eventId}`}>
+                        <div className="text-xs text-gray-500 hover:text-blue-600 transition-colors cursor-pointer">
+                          <div className="flex items-center mb-1">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            <span className="font-medium">{getEventTitle(photo.eventId)}</span>
+                          </div>
+                          {event && (
+                            <>
+                              <div className="flex items-center mb-1">
+                                <MapPin className="h-3 w-3 mr-1" />
+                                <span>{event.location}</span>
+                              </div>
+                              <div>
+                                {new Date(event.date).toLocaleDateString()}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </Link>
+
+                      <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-100">
+                        Uploaded {new Date(photo.createdAt).toLocaleDateString()}
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </div>
           )}
+
+          {/* Stats */}
+          <div className="text-center text-sm text-gray-500 mt-8 pt-8 border-t border-gray-200">
+            Showing {filteredPhotos.length} of {photos.length} photos from {events.length} events
+          </div>
         </motion.div>
       </div>
     </div>

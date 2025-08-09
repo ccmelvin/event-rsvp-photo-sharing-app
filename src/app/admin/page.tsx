@@ -7,7 +7,10 @@ import { remove } from 'aws-amplify/storage';
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { Calendar, Users, Camera, Trash2, Edit, Eye } from 'lucide-react';
 import { PhotoDisplay } from '@/components/PhotoDisplay';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Modal } from '@/components/Modal';
+import { NotificationToast } from '@/components/NotificationToast';
+import { useNotifications } from '@/hooks/useNotifications';
 import Link from 'next/link';
 import type { Schema } from '../../../amplify/data/resource';
 
@@ -23,11 +26,43 @@ export default function AdminPage() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [lastPhotoCount, setLastPhotoCount] = useState(0);
+  const { notifications, addNotification, dismissNotification } = useNotifications();
 
   useEffect(() => {
     if (user) {
       fetchUserEvents();
       fetchPendingPhotos();
+      
+      // Subscribe to user's events
+      const eventSub = client.models.Event.observeQuery({
+        filter: { createdBy: { eq: user.userId } }
+      }).subscribe({
+        next: ({ items }) => setEvents(items)
+      });
+
+      // Subscribe to pending photos
+      const photoSub = client.models.Photo.observeQuery({
+        filter: { isApproved: { eq: false } }
+      }).subscribe({
+        next: ({ items }) => {
+          // Check for new pending photos
+          if (lastPhotoCount > 0 && items.length > lastPhotoCount) {
+            addNotification(
+              'photo',
+              'Photo Needs Review!',
+              'A new photo is waiting for approval'
+            );
+          }
+          setPhotos(items);
+          setLastPhotoCount(items.length);
+        }
+      });
+
+      return () => {
+        eventSub.unsubscribe();
+        photoSub.unsubscribe();
+      };
     }
   }, [user]);
 
@@ -52,6 +87,7 @@ export default function AdminPage() {
         filter: { isApproved: { eq: false } },
       });
       setPhotos(data);
+      setLastPhotoCount(data.length);
     } catch (error) {
       console.error('Error fetching pending photos:', error);
     }
@@ -371,6 +407,11 @@ export default function AdminPage() {
             </div>
           </div>
         </Modal>
+        
+        <NotificationToast 
+          notifications={notifications}
+          onDismiss={dismissNotification}
+        />
       </div>
     </div>
   );

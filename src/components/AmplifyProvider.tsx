@@ -15,7 +15,9 @@ interface AmplifyProviderProps {
 export function AmplifyProvider({ children }: AmplifyProviderProps) {
   return (
     <Authenticator.Provider>
-      {children}
+      <div className="min-h-screen">
+        {children}
+      </div>
     </Authenticator.Provider>
   );
 }

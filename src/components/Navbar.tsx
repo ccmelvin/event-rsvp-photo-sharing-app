@@ -1,28 +1,51 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthenticator } from '@aws-amplify/ui-react';
+import { useUser } from '@/contexts/UserContext';
+import { signOut } from 'aws-amplify/auth';
 import { motion } from 'framer-motion';
 import { Calendar, Camera, User, LogOut, Menu, X } from 'lucide-react';
 
 export function Navbar() {
-  const { user, signOut } = useAuthenticator((context) => [context.user]);
+  const { user, authStatus } = useAuthenticator((context) => [context.user, context.authStatus]);
+  const { profile, avatarUrl } = useUser();
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
 
   const handleSignOut = async () => {
+    if (isSigningOut) return; // Prevent multiple sign out attempts
+    
     try {
-      await signOut();
-      window.location.href = '/';
+      setIsSigningOut(true);
+      await signOut({ global: true });
+      // Clear any cached data
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
+      // Redirect to home page
+      router.push('/');
+      // Force a page reload to clear all state
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
     } catch (error) {
       console.error('Error signing out:', error);
+      // Force redirect even if sign out fails
       window.location.href = '/';
+    } finally {
+      setIsSigningOut(false);
     }
   };
+
+  const isAuthenticated = authStatus === 'authenticated' && user;
 
   return (
     <nav className="bg-white shadow-lg border-b border-gray-200">
@@ -44,10 +67,13 @@ export function Navbar() {
             <Link href="/events" className="text-gray-600 hover:text-blue-600 transition-colors">
               Events
             </Link>
-            {user && (
+            {isAuthenticated && (
               <>
                 <Link href="/gallery" className="text-gray-600 hover:text-blue-600 transition-colors">
                   Gallery
+                </Link>
+                <Link href="/profile" className="text-gray-600 hover:text-blue-600 transition-colors">
+                  Profile
                 </Link>
                 <Link href="/admin" className="text-gray-600 hover:text-blue-600 transition-colors">
                   Admin
@@ -58,20 +84,38 @@ export function Navbar() {
 
           {/* User Menu */}
           <div className="hidden md:flex items-center space-x-4">
-            {user ? (
+            {isAuthenticated ? (
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
-                  <User className="h-5 w-5 text-gray-600" />
-                  <span className="text-gray-700">{user.signInDetails?.loginId}</span>
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-blue-600 flex items-center justify-center relative">
+                    {avatarUrl ? (
+                      <Image 
+                        src={avatarUrl} 
+                        alt="Avatar" 
+                        fill
+                        className="object-cover"
+                        sizes="32px"
+                      />
+                    ) : (
+                      <User className="h-4 w-4 text-white" />
+                    )}
+                  </div>
+                  <span className="text-gray-700">
+                    {profile?.firstName && profile?.lastName 
+                      ? `${profile.firstName} ${profile.lastName}`.trim()
+                      : user.signInDetails?.loginId || user.username || 'User'
+                    }
+                  </span>
                 </div>
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleSignOut}
-                  className="flex items-center space-x-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors"
+                  disabled={isSigningOut}
+                  className="flex items-center space-x-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors disabled:opacity-50"
                 >
                   <LogOut className="h-4 w-4" />
-                  <span>Sign Out</span>
+                  <span>{isSigningOut ? 'Signing Out...' : 'Sign Out'}</span>
                 </motion.button>
               </div>
             ) : (
@@ -114,7 +158,7 @@ export function Navbar() {
               >
                 Events
               </Link>
-              {user && (
+              {isAuthenticated && (
                 <>
                   <Link
                     href="/gallery"
@@ -122,6 +166,13 @@ export function Navbar() {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     Gallery
+                  </Link>
+                  <Link
+                    href="/profile"
+                    className="text-gray-600 hover:text-blue-600 transition-colors"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Profile
                   </Link>
                   <Link
                     href="/admin"
@@ -132,21 +183,39 @@ export function Navbar() {
                   </Link>
                 </>
               )}
-              {user ? (
+              {isAuthenticated ? (
                 <div className="pt-4 border-t border-gray-200">
                   <div className="flex items-center space-x-2 mb-4">
-                    <User className="h-5 w-5 text-gray-600" />
-                    <span className="text-gray-700">{user.signInDetails?.loginId}</span>
+                    <div className="w-8 h-8 rounded-full overflow-hidden bg-blue-600 flex items-center justify-center relative">
+                      {avatarUrl ? (
+                        <Image 
+                          src={avatarUrl} 
+                          alt="Avatar" 
+                          fill
+                          className="object-cover"
+                          sizes="32px"
+                        />
+                      ) : (
+                        <User className="h-4 w-4 text-white" />
+                      )}
+                    </div>
+                    <span className="text-gray-700">
+                      {profile?.firstName && profile?.lastName 
+                        ? `${profile.firstName} ${profile.lastName}`.trim()
+                        : user.signInDetails?.loginId || user.username || 'User'
+                      }
+                    </span>
                   </div>
                   <button
                     onClick={() => {
                       setIsMenuOpen(false);
                       handleSignOut();
                     }}
-                    className="flex items-center space-x-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors w-full justify-center"
+                    disabled={isSigningOut}
+                    className="flex items-center space-x-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors w-full justify-center disabled:opacity-50"
                   >
                     <LogOut className="h-4 w-4" />
-                    <span>Sign Out</span>
+                    <span>{isSigningOut ? 'Signing Out...' : 'Sign Out'}</span>
                   </button>
                 </div>
               ) : (

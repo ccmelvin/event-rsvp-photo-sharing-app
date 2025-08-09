@@ -8,6 +8,7 @@ import { StorageManager } from '@aws-amplify/ui-react-storage';
 import { Calendar, MapPin, Users, Camera, Check, X, Clock, Edit } from 'lucide-react';
 import { PhotoDisplay } from '@/components/PhotoDisplay';
 import { PhotoGallery } from '@/components/PhotoGallery';
+import { NotificationModal, useNotification } from '@/components/NotificationModal';
 import Link from 'next/link';
 import type { Schema } from '../../../../amplify/data/resource';
 
@@ -23,8 +24,13 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
   const [event, setEvent] = useState<any>(null);
   const [rsvp, setRsvp] = useState<any>(null);
   const [photos, setPhotos] = useState<any[]>([]);
+  const [allRsvps, setAllRsvps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [rsvpLoading, setRsvpLoading] = useState(false);
+  const [lastRsvpCount, setLastRsvpCount] = useState(0);
+  const [lastPhotoCount, setLastPhotoCount] = useState(0);
+  const { notifications, addNotification, dismissNotification } = useNotifications();
+  const { notification, showSuccess, showError, hideNotification } = useNotification();
 
   useEffect(() => {
     fetchEventDetails();
@@ -32,6 +38,55 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
       fetchUserRsvp();
     }
     fetchPhotos();
+    fetchAllRsvps();
+    
+    // Subscribe to RSVP changes
+    const rsvpSub = client.models.RSVP.observeQuery({
+      filter: { eventId: { eq: resolvedParams.id } }
+    }).subscribe({
+      next: ({ items }) => {
+        // Check for new RSVPs
+        if (lastRsvpCount > 0 && items.length > lastRsvpCount) {
+          addNotification(
+            'rsvp',
+            'New RSVP!',
+            'Someone just RSVP\'d to this event'
+          );
+        }
+        setAllRsvps(items);
+        setLastRsvpCount(items.length);
+        if (user) {
+          const userRsvp = items.find(r => r.userId === user.userId);
+          setRsvp(userRsvp || null);
+        }
+      }
+    });
+
+    // Subscribe to photo changes
+    const photoSub = client.models.Photo.observeQuery({
+      filter: { 
+        eventId: { eq: resolvedParams.id },
+        isApproved: { eq: true }
+      }
+    }).subscribe({
+      next: ({ items }) => {
+        // Check for new photos
+        if (lastPhotoCount > 0 && items.length > lastPhotoCount) {
+          addNotification(
+            'photo',
+            'New Photo!',
+            'A new photo was added to this event'
+          );
+        }
+        setPhotos(items);
+        setLastPhotoCount(items.length);
+      }
+    });
+
+    return () => {
+      rsvpSub.unsubscribe();
+      photoSub.unsubscribe();
+    };
   }, [resolvedParams.id, user]);
 
   const fetchEventDetails = async () => {
@@ -70,10 +125,23 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
         },
       });
       setPhotos(data);
+      setLastPhotoCount(data.length);
     } catch (error) {
       console.error('Error fetching photos:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAllRsvps = async () => {
+    try {
+      const { data } = await client.models.RSVP.list({
+        filter: { eventId: { eq: resolvedParams.id } },
+      });
+      setAllRsvps(data);
+      setLastRsvpCount(data.length);
+    } catch (error) {
+      console.error('Error fetching RSVPs:', error);
     }
   };
 
@@ -197,10 +265,18 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
                   <span>{event.location}</span>
                 </div>
 
-                {event.maxAttendees && (
-                  <div className="flex items-center text-gray-600">
-                    <Users className="h-5 w-5 mr-3" />
-                    <span>Max {event.maxAttendees} attendees</span>
+                <div className="flex items-center text-gray-600">
+                  <Users className="h-5 w-5 mr-3" />
+                  <span>
+                    {allRsvps.filter(r => r.status === 'ATTENDING').length} attending
+                    {event.maxAttendees && ` / ${event.maxAttendees} max`}
+                  </span>
+                </div>
+                
+                {allRsvps.length > 0 && (
+                  <div className="text-sm text-gray-500 mt-2">
+                    {allRsvps.filter(r => r.status === 'MAYBE').length} maybe • {' '}
+                    {allRsvps.filter(r => r.status === 'NOT_ATTENDING').length} not attending
                   </div>
                 )}
               </div>
@@ -256,7 +332,7 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
               <div className="space-y-4">
                 <StorageManager
                   acceptedFileTypes={['image/*']}
-                  path={`event-photos/${resolvedParams.id}/`}
+                  path={({ identityId }) => `event-photos/${resolvedParams.id}/`}
                   maxFileCount={10}
                   maxFileSize={10000000} // 10MB
                   onUploadSuccess={async (event) => {
@@ -278,10 +354,21 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
                       
                       console.log('Photo record created successfully');
                       
+                      // Show success message
+                      showSuccess('Photo Uploaded', 'Your photo has been uploaded successfully!');
+                      
                       // Refresh photos after upload
                       fetchPhotos();
                     } catch (error) {
                       console.error('Error creating photo record:', error);
+                    }
+                  }}
+                  onUploadError={(error) => {
+                    console.error('Upload error:', error);
+                    if (error.message?.includes('NoBucket') || error.message?.includes('bucket')) {
+                      showError('Upload Failed', 'Photo upload is not available yet. Please try again later.');
+                    } else {
+                      showError('Upload Failed', 'Failed to upload photo. Please try again.');
                     }
                   }}
                 />
@@ -292,8 +379,8 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
                     <li>• Upload up to 10 photos at once</li>
                     <li>• Maximum file size: 10MB per photo</li>
                     <li>• Supported formats: JPG, PNG, GIF</li>
-                    <li>• Photos require admin approval before appearing in gallery</li>
-                    <li>• You can edit captions and delete your photos after approval</li>
+                    <li>• Photos appear in gallery immediately</li>
+                    <li>• You can edit captions and delete your photos</li>
                   </ul>
                 </div>
               </div>
@@ -319,6 +406,20 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
             />
           </motion.div>
         </motion.div>
+        
+        <NotificationToast 
+          notifications={notifications}
+          onDismiss={dismissNotification}
+        />
+
+        {/* Custom Notification Modal */}
+        <NotificationModal
+          isOpen={notification.isOpen}
+          onClose={hideNotification}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+        />
       </div>
     </div>
   );

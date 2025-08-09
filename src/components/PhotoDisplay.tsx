@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { getUrl } from 'aws-amplify/storage';
 import { Camera, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27,9 +28,26 @@ export function PhotoDisplay({
 
   useEffect(() => {
     const fetchImageUrl = async () => {
+      if (!s3Key) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(false);
+        
+        // Check if storage is configured
+        const { Amplify } = await import('aws-amplify');
+        const config = Amplify.getConfig();
+        
+        if (!config.Storage?.S3?.bucket) {
+          console.warn('S3 storage not configured. Photos will not display until storage is set up.');
+          setError(true);
+          setLoading(false);
+          return;
+        }
         
         const result = await getUrl({
           path: s3Key,
@@ -49,6 +67,9 @@ export function PhotoDisplay({
 
     if (s3Key) {
       fetchImageUrl();
+    } else {
+      setError(true);
+      setLoading(false);
     }
   }, [s3Key]);
 
@@ -58,13 +79,18 @@ export function PhotoDisplay({
     }
   };
 
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
+
   const handleImageLoad = () => {
-    setLoading(false);
+    setImageLoading(false);
+    setImageError(false);
   };
 
   const handleImageError = () => {
+    setImageLoading(false);
+    setImageError(true);
     setError(true);
-    setLoading(false);
   };
 
   if (loading) {
@@ -79,15 +105,38 @@ export function PhotoDisplay({
     return (
       <div className={`bg-gray-200 rounded-lg flex flex-col items-center justify-center ${className}`} style={{ minHeight: '150px' }}>
         <Camera className="h-8 w-8 text-gray-400 mb-2" />
-        <span className="text-xs text-gray-500 text-center px-2">Image unavailable</span>
+        <span className="text-xs text-gray-500 text-center px-2">
+          {!s3Key ? 'No image' : 'Image loading...'}
+        </span>
         <button 
           onClick={() => {
             setError(false);
             setLoading(true);
             // Retry fetching the image
             const fetchImageUrl = async () => {
+              if (!s3Key) {
+                setError(true);
+                setLoading(false);
+                return;
+              }
+
               try {
-                const result = await getUrl({ path: s3Key });
+                const { Amplify } = await import('aws-amplify');
+                const config = Amplify.getConfig();
+                
+                if (!config.Storage?.S3?.bucket) {
+                  console.warn('S3 storage not configured. Images cannot load until storage is deployed.');
+                  setError(true);
+                  setLoading(false);
+                  return;
+                }
+                
+                const result = await getUrl({
+                  path: s3Key,
+                  options: {
+                    expiresIn: 3600,
+                  },
+                });
                 setImageUrl(result.url.toString());
                 setLoading(false);
               } catch (error) {
@@ -98,9 +147,9 @@ export function PhotoDisplay({
             };
             fetchImageUrl();
           }}
-          className="text-xs text-blue-600 hover:text-blue-800 mt-1 px-2 py-1 rounded"
+          className="text-xs text-blue-600 hover:text-blue-800 mt-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
         >
-          Retry
+          Try Again
         </button>
       </div>
     );
@@ -113,19 +162,27 @@ export function PhotoDisplay({
         onClick={handleImageClick}
         style={{ minWidth: '150px', minHeight: '150px' }}
       >
-        <img
+        {imageLoading && (
+          <div className="absolute inset-0 bg-gray-200 animate-pulse flex items-center justify-center">
+            <Camera className="h-8 w-8 text-gray-400" />
+          </div>
+        )}
+        <Image
           src={imageUrl}
-          alt={alt}
-          className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+          alt={alt || 'Photo'}
+          fill
+          className={`object-cover transition-all duration-300 ${
+            imageLoading ? 'opacity-0' : 'opacity-100'
+          } hover:scale-105`}
           style={{ 
-            minWidth: '150px', 
-            minHeight: '150px',
             backgroundColor: '#f3f4f6' // Light gray background
           }}
           onLoad={handleImageLoad}
           onError={handleImageError}
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          priority={false}
         />
-        {caption && (
+        {caption && !imageLoading && (
           <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-2 text-sm">
             {caption}
           </div>
@@ -155,11 +212,17 @@ export function PhotoDisplay({
               >
                 <X className="h-8 w-8" />
               </button>
-              <img
-                src={imageUrl}
-                alt={alt}
-                className="max-w-full max-h-full object-contain rounded-lg"
-              />
+              <div className="relative max-w-full max-h-full">
+                <Image
+                  src={imageUrl}
+                  alt={alt || 'Photo'}
+                  width={800}
+                  height={600}
+                  className="max-w-full max-h-full object-contain rounded-lg"
+                  style={{ maxWidth: '90vw', maxHeight: '90vh' }}
+                  sizes="90vw"
+                />
+              </div>
               {caption && (
                 <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white p-4 rounded-b-lg">
                   <p className="text-center">{caption}</p>

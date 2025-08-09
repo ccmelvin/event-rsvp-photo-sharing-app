@@ -1,25 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, use } from 'react';
 import { motion } from 'framer-motion';
 import { generateClient } from 'aws-amplify/data';
 import { useAuthenticator } from '@aws-amplify/ui-react';
-import { Calendar, MapPin, Users, Save, X } from 'lucide-react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Save, ArrowLeft } from 'lucide-react';
 import type { Schema } from '../../../../../amplify/data/resource';
 
 const client = generateClient<Schema>();
 
 interface EditEventPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default function EditEventPage({ params }: EditEventPageProps) {
   const { user } = useAuthenticator((context) => [context.user]);
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const resolvedParams = use(params);
+  const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(true);
   const [event, setEvent] = useState<any>(null);
   const [formData, setFormData] = useState({
     title: '',
@@ -31,73 +31,68 @@ export default function EditEventPage({ params }: EditEventPageProps) {
   });
 
   useEffect(() => {
-    if (params.id) {
-      fetchEvent();
-    }
-  }, [params.id]);
+    fetchEvent();
+  }, [resolvedParams.id]);
 
   const fetchEvent = async () => {
     try {
-      const { data } = await client.models.Event.get({ id: params.id });
+      const { data } = await client.models.Event.get({ id: resolvedParams.id });
       if (data) {
-        // Check if user owns this event
-        if (data.createdBy !== user?.userId) {
-          router.push('/events');
-          return;
-        }
-
         setEvent(data);
         setFormData({
           title: data.title || '',
           description: data.description || '',
           date: data.date ? new Date(data.date).toISOString().slice(0, 16) : '',
           location: data.location || '',
-          maxAttendees: data.maxAttendees?.toString() || '',
+          maxAttendees: data.maxAttendees ? data.maxAttendees.toString() : '',
           isPublic: data.isPublic ?? true,
         });
       }
     } catch (error) {
       console.error('Error fetching event:', error);
-      router.push('/events');
+    } finally {
+      setFetchLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !event) return;
+
+    setLoading(true);
+    try {
+      const eventData = {
+        id: event.id,
+        title: formData.title,
+        description: formData.description || undefined,
+        date: new Date(formData.date).toISOString(),
+        location: formData.location,
+        maxAttendees: formData.maxAttendees ? parseInt(formData.maxAttendees) : undefined,
+        isPublic: formData.isPublic,
+      };
+
+      await client.models.Event.update(eventData);
+      router.push(`/events/${event.id}`);
+    } catch (error) {
+      console.error('Error updating event:', error);
+      alert('Failed to update event. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
-    }));
-  };
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Authentication Required</h2>
+          <p className="text-gray-600">Please sign in to edit events.</p>
+        </div>
+      </div>
+    );
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-
-    try {
-      const updateData = {
-        id: params.id,
-        title: formData.title,
-        description: formData.description,
-        date: new Date(formData.date).toISOString(),
-        location: formData.location,
-        maxAttendees: formData.maxAttendees ? parseInt(formData.maxAttendees) : null,
-        isPublic: formData.isPublic,
-      };
-
-      await client.models.Event.update(updateData);
-      router.push(`/events/${params.id}`);
-    } catch (error) {
-      console.error('Error updating event:', error);
-      alert('Failed to update event. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
+  if (fetchLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
@@ -107,14 +102,21 @@ export default function EditEventPage({ params }: EditEventPageProps) {
 
   if (!event) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">Event Not Found</h1>
-          <Link href="/events">
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-              Back to Events
-            </button>
-          </Link>
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Event Not Found</h2>
+          <p className="text-gray-600">The event you're trying to edit doesn't exist.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (event.createdBy !== user.userId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Access Denied</h2>
+          <p className="text-gray-600">You can only edit events you created.</p>
         </div>
       </div>
     );
@@ -129,151 +131,118 @@ export default function EditEventPage({ params }: EditEventPageProps) {
           transition={{ duration: 0.8 }}
           className="max-w-2xl mx-auto"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-2">Edit Event</h1>
-              <p className="text-gray-600">Update your event details</p>
-            </div>
-            <Link href={`/events/${params.id}`}>
-              <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors">
-                <X className="h-5 w-5" />
-                <span>Cancel</span>
+          <div className="bg-white rounded-lg shadow-md p-8">
+            <div className="flex items-center mb-6">
+              <button
+                onClick={() => router.back()}
+                className="mr-4 p-2 text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5" />
               </button>
-            </Link>
-          </div>
-
-          {/* Edit Form */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="bg-white rounded-lg shadow-md p-8"
-          >
+              <h1 className="text-3xl font-bold text-gray-800">Edit Event</h1>
+            </div>
+            
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Event Title */}
               <div>
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Event Title *
                 </label>
                 <input
                   type="text"
-                  id="title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter event title"
                 />
               </div>
 
-              {/* Event Description */}
               <div>
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description
                 </label>
                 <textarea
-                  id="description"
-                  name="description"
                   value={formData.description}
-                  onChange={handleInputChange}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Describe your event"
                 />
               </div>
 
-              {/* Date and Time */}
               <div>
-                <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
-                  <Calendar className="inline h-4 w-4 mr-1" />
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date & Time *
                 </label>
                 <input
                   type="datetime-local"
-                  id="date"
-                  name="date"
-                  value={formData.date}
-                  onChange={handleInputChange}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
 
-              {/* Location */}
               <div>
-                <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-2">
-                  <MapPin className="inline h-4 w-4 mr-1" />
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Location *
                 </label>
                 <input
                   type="text"
-                  id="location"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleInputChange}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Event location"
                 />
               </div>
 
-              {/* Max Attendees */}
               <div>
-                <label htmlFor="maxAttendees" className="block text-sm font-medium text-gray-700 mb-2">
-                  <Users className="inline h-4 w-4 mr-1" />
-                  Maximum Attendees (Optional)
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Maximum Attendees
                 </label>
                 <input
                   type="number"
-                  id="maxAttendees"
-                  name="maxAttendees"
-                  value={formData.maxAttendees}
-                  onChange={handleInputChange}
                   min="1"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={formData.maxAttendees}
+                  onChange={(e) => setFormData({ ...formData, maxAttendees: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Leave empty for unlimited"
                 />
               </div>
 
-              {/* Public/Private */}
-              <div>
-                <label className="flex items-center space-x-3">
-                  <input
-                    type="checkbox"
-                    name="isPublic"
-                    checked={formData.isPublic}
-                    onChange={handleInputChange}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="text-sm font-medium text-gray-700">
-                    Make this event public (visible to all users)
-                  </span>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="isPublic"
+                  checked={formData.isPublic}
+                  onChange={(e) => setFormData({ ...formData, isPublic: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="isPublic" className="ml-2 block text-sm text-gray-700">
+                  Make this event public
                 </label>
               </div>
 
-              {/* Submit Button */}
-              <div className="flex justify-end space-x-4 pt-6">
-                <Link href={`/events/${params.id}`}>
-                  <button
-                    type="button"
-                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </Link>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  disabled={loading}
+                  className="flex-1 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
                 >
                   <Save className="h-4 w-4" />
-                  <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                  <span>{loading ? 'Saving...' : 'Save Changes'}</span>
                 </button>
               </div>
             </form>
-          </motion.div>
+          </div>
         </motion.div>
       </div>
     </div>

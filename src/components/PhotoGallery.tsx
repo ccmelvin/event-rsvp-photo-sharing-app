@@ -6,7 +6,7 @@ import { generateClient } from 'aws-amplify/data';
 import { remove } from 'aws-amplify/storage';
 import { Camera, Edit3, Trash2, Plus, X, Save } from 'lucide-react';
 import { PhotoDisplay } from './PhotoDisplay';
-import { Modal } from './Modal';
+import { Modal, ConfirmationModal } from './Modal';
 import type { Schema } from '../../amplify/data/resource';
 
 const client = generateClient<Schema>();
@@ -151,7 +151,7 @@ export function PhotoGallery({
                   <div className="flex space-x-1">
                     <button
                       onClick={() => handleSaveCaption(photo.id)}
-                      className="flex items-center space-x-1 px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                      className="flex items-center space-x-1 px-2 py-1 bg-gray-800 text-white text-xs rounded hover:bg-gray-900 transition-colors"
                     >
                       <Save className="h-3 w-3" />
                       <span>Save</span>
@@ -161,7 +161,7 @@ export function PhotoGallery({
                         setEditingPhoto(null);
                         setEditCaption('');
                       }}
-                      className="flex items-center space-x-1 px-2 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700 transition-colors"
+                      className="flex items-center space-x-1 px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
                     >
                       <X className="h-3 w-3" />
                       <span>Cancel</span>
@@ -189,37 +189,19 @@ export function PhotoGallery({
       </div>
 
       {/* Delete Confirmation Modal */}
-      <Modal
+      <ConfirmationModal
         isOpen={showDeleteModal}
         onClose={() => {
           setShowDeleteModal(false);
           setDeletingPhoto(null);
         }}
+        onConfirm={handleDeletePhoto}
         title="Delete Photo"
-      >
-        <div className="space-y-4">
-          <p className="text-gray-600">
-            Are you sure you want to delete this photo? This action cannot be undone.
-          </p>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => {
-                setShowDeleteModal(false);
-                setDeletingPhoto(null);
-              }}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleDeletePhoto}
-              className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      </Modal>
+        message="Are you sure you want to delete this photo? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 }

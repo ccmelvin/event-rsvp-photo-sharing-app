@@ -67,6 +67,8 @@ const schema = a.schema({
       email: a.string().required(),
       firstName: a.string(),
       lastName: a.string(),
+      bio: a.string(),
+      avatarKey: a.string(),
       isAdmin: a.boolean().default(false),
       createdAt: a.datetime(),
       updatedAt: a.datetime(),
